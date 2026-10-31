@@ -1,0 +1,176 @@
+# codebuddy-sound-hooks
+
+A sound when **CodeBuddy finishes a turn**, or when it **stops and waits for you to confirm** something.
+
+So you can go read something else instead of watching the chat window spin.
+
+Works with both clients: the **JetBrains plugin** (PyCharm, IntelliJ IDEA, and other JetBrains IDEs) and the **CodeBuddy desktop IDE**.
+
+> Unofficial project. Not affiliated with Tencent Cloud or CodeBuddy.
+
+---
+
+## Does this fit your setup?
+
+| | |
+|---|---|
+| **You use** | CodeBuddy JetBrains plugin, or the CodeBuddy desktop IDE |
+| **You want** | To stop babysitting the chat window |
+| **You need** | `python3` (already on macOS; `apt install python3` on Linux) |
+| **macOS** | Full: finished sound + waiting-for-you sound |
+| **Linux** | Finished sound works. Waiting-for-you is untested — the watcher looks for macOS log paths |
+| **Windows** | Finished sound works, via Git Bash. Waiting-for-you not supported |
+
+If you're not on macOS, read [Platform support](#platform-support) before installing. The "finished" sound works everywhere; the second sound is macOS-only for now.
+
+---
+
+## What you'll hear
+
+| When | Sound |
+|---|---|
+| A turn finishes | Glass — a soft chime |
+| CodeBuddy is waiting for you to confirm | Ping — a short blip |
+
+After installing, ask CodeBuddy something and walk away. When it's done, you'll hear the chime.
+
+## Install
+
+### macOS / Linux
+
+```bash
+git clone https://github.com/GuangYangDev/codebuddy-sound-hooks.git
+cd codebuddy-sound-hooks
+./install.sh
+```
+
+That's it. Changes take effect on the next turn — no IDE restart.
+
+Want the "waiting for you" sound too?
+
+```bash
+./install.sh --with-watch     # adds a small background watcher (macOS)
+```
+
+### Windows
+
+The hooks themselves work on Windows, but you need **Git for Windows** — CodeBuddy runs hooks through Git Bash on Windows (it does not support `cmd.exe` or PowerShell), and this installer is a bash script.
+
+1. Install [Git for Windows](https://git-scm.com/download/win)
+2. Open **Git Bash**, then in the repo directory:
+
+```bash
+sh bin/notify.sh --test      # confirm you hear two sounds
+python3 lib/settings.py add "$(pwd)/bin/notify.sh"
+```
+
+If `python3` is missing, install it from the Microsoft Store or python.org, and make sure `python3` is on PATH inside Git Bash.
+
+### Check it worked
+
+```bash
+sh bin/notify.sh --test        # plays both sounds
+python3 lib/settings.py status # shows the two hooks that were added
+```
+
+## Everyday use
+
+```bash
+touch pause      # silence everything, effective immediately
+rm pause         # back on
+
+./uninstall.sh   # remove the hooks and stop the watcher
+```
+
+The installer only **adds** to `~/.codebuddy/settings.json` — it never overwrites your existing hooks, it backs the file up first, and running it twice does nothing.
+
+## Change the sound
+
+Prepend an env var to the hook command in `settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command",
+        "command": "CB_SOUND_DONE=/System/Library/Sounds/Hero.aiff sh ~/codebuddy-sound-hooks/bin/notify.sh # codebuddy-sound-hooks" } ] }
+    ]
+  }
+}
+```
+
+macOS ships these in `/System/Library/Sounds/`: Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr, Sosumi, Submarine, Tink.
+
+`CB_VOLUME=0.5` works too.
+
+## No sound?
+
+**Turn finished, but silent**
+
+```bash
+tail -5 events.log            # is a "Stop" line appearing?
+python3 lib/settings.py status
+```
+
+- Line appears, still silent → system volume, or the sound file path is wrong.
+- No line at all → the hook isn't firing. Check the command path in `~/.codebuddy/settings.json`, and confirm `sh bin/notify.sh --test` plays.
+
+**Waiting for you, but silent**
+
+```bash
+python3 lib/watch-confirm.py --once   # does the watcher see anything at all?
+```
+
+Zero matches on Linux or Windows is expected — see below.
+
+## Platform support
+
+| Feature | macOS | Linux | Windows |
+|---|---|---|---|
+| Finished sound (hook `Stop`) | ✅ | ✅ | ✅ via Git Bash |
+| Waiting-for-you sound | ✅ | ⚠️ untested | ❌ not supported |
+| Auto-start of the watcher | ✅ launchd | ❌ run manually | ❌ |
+
+The watcher reads CodeBuddy's own log files to detect "waiting" (there is no hook for it — see [Why](#why-not-just-use-the-notification-hook)). It only knows the macOS log locations:
+
+- `~/Library/Logs/JetBrains/*/fusion/logs/*/fusion.log`
+- `~/Library/Application Support/CodeBuddy CN/logs/*/window*/exthost/Tencent-Cloud.coding-copilot/*.log`
+
+If you find the equivalent paths on Linux or Windows, a PR is very welcome.
+
+## Why not just use the `Notification` hook?
+
+CodeBuddy documents a `Notification` hook that looks like exactly the right tool for "waiting for confirmation". **It never fires in the IDE.**
+
+Its executor is wired up, but all four things that would call it (`notifyPermissionPrompt`, `notifyIdle`, `notifyAuthSuccess`, `notifyElicitationDialog`) exist only as definitions with zero callers — dead code in the shipped extension. A day-long event log recorded seven `Stop` events and zero `Notification` events.
+
+So this project uses the official `Stop` hook for "finished" (reliable, both clients), and falls back to watching logs for "waiting for you". Full investigation, with the greps and payloads, is in [docs/findings.md](docs/findings.md).
+
+## Privacy
+
+Everything runs locally. The hook reads the event JSON from stdin, plays a sound, and appends one line to `events.log` (timestamp + event name + client). **There is no network code** — nothing is uploaded, and tool inputs or file contents in the payload are never read or stored.
+
+Verify:
+
+```bash
+grep -rn "curl\|wget\|urllib\|requests\|socket" bin lib    # nothing
+```
+
+Details in [PRIVACY.md](PRIVACY.md).
+
+## How it works
+
+```
+CodeBuddy turn ends
+    └─ hook "Stop"            → bin/notify.sh            → play done sound
+CodeBuddy waits for you
+    └─ log watcher            → bin/watch-confirm.py     → play confirm sound
+```
+
+`lib/settings.py` handles the `settings.json` merge, so installing twice is harmless and uninstalling leaves every other setting untouched.
+
+One gotcha: `Stop` hooks must never write to stdout. CodeBuddy shows a Stop hook's stdout inside the chat, which would inject junk into the model's conversation context. `bin/notify.sh` keeps stdout empty and always exits 0 (exit code 2 on a Stop hook makes the agent keep working instead of stopping).
+
+## License
+
+MIT
