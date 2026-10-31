@@ -40,8 +40,10 @@ No HTTP requests, no telemetry, no analytics, no update checks.
 Verify it yourself:
 
 ```bash
-grep -rn "curl\|wget\|urllib\|requests\|socket" bin lib
+grep -rn "curl\|wget\|urllib\|requests\|socket" bin lib *.sh
 ```
+
+`*.sh` covers `install.sh` and `uninstall.sh` — the two scripts that actually write to your `settings.json` and register a background service, so they deserve the same scrutiny as the rest.
 
 That returns nothing. The only `http` string anywhere in this repo is the W3C DOCTYPE URL inside the launchd plist template — a document type declaration, not a fetch.
 

@@ -1,42 +1,42 @@
 # codebuddy-sound-hooks
 
-[中文](README.md) | [English](README.en.md)
+**English** | [中文](README.zh-CN.md)
 
-CodeBuddy **干完活响一声**，**要你确认时也响一声**。
+A sound when **CodeBuddy finishes a turn**, or when it **stops and waits for you to confirm** something.
 
-这样你就不用盯着聊天窗口等它转圈，可以去干别的事。
+So you can go read something else instead of watching the chat window spin.
 
-两端都支持：**JetBrains 插件**（PyCharm、IntelliJ IDEA 及其他 JetBrains IDE）和 **CodeBuddy 桌面 IDE**。
+Works with both clients: the **JetBrains plugin** (PyCharm, IntelliJ IDEA, and other JetBrains IDEs) and the **CodeBuddy desktop IDE**.
 
-> 非官方项目，与腾讯云及 CodeBuddy 无隶属关系。
-
----
-
-## 先看看适不适合你
-
-| | |
-|---|---|
-| **你在用** | CodeBuddy 的 JetBrains 插件，或者 CodeBuddy 桌面版 |
-| **你想要** | 不用一直盯着聊天窗口 |
-| **你需要** | `python3`（macOS 自带；Linux 用 `apt install python3`） |
-| **macOS** | 完整：完成音 + 等待确认音 |
-| **Linux** | 完成音可用；等待确认音未实测（监听写的是 macOS 日志路径） |
-| **Windows** | 完成音可用，需要 Git Bash；等待确认音不支持 |
-
-不在 macOS 上的话，先看 [平台支持](#平台支持) 再装。完成音各平台都能用，第二个声音目前只有 macOS 有。
+> Unofficial project. Not affiliated with Tencent Cloud or CodeBuddy.
 
 ---
 
-## 会听到什么
+## Does this fit your setup?
 
-| 什么时候 | 什么声音 |
+| Question | Answer |
 |---|---|
-| 一轮回复结束 | Glass，一声清脆的"叮" |
-| CodeBuddy 停下来等你确认 | Ping，一声短促提示 |
+| **You use** | CodeBuddy JetBrains plugin, or the CodeBuddy desktop IDE |
+| **You want** | To stop babysitting the chat window |
+| **You need** | `python3` (already on macOS; `apt install python3` on Linux) |
+| **macOS** | Full: finished sound + waiting-for-you sound |
+| **Linux** | Finished sound works. Waiting-for-you is untested — the watcher looks for macOS log paths |
+| **Windows** | Finished sound works, via Git Bash. Waiting-for-you not supported |
 
-装完随便问它一句，然后走开。它干完就会响。
+If you're not on macOS, read [Platform support](#platform-support) before installing. The "finished" sound works everywhere; the second sound is macOS-only for now.
 
-## 安装
+---
+
+## What you'll hear
+
+| When | Sound |
+|---|---|
+| A turn finishes | Glass — a soft chime |
+| CodeBuddy is waiting for you to confirm | Ping — a short blip |
+
+After installing, ask CodeBuddy something and walk away. When it's done, you'll hear the chime.
+
+## Install
 
 ### macOS / Linux
 
@@ -46,133 +46,147 @@ cd codebuddy-sound-hooks
 ./install.sh
 ```
 
-就这样。下一轮对话开始生效，不用重启 IDE。
+That's it. Changes take effect on the next turn — no IDE restart.
 
-还想要"等待确认"那声？
+Want the "waiting for you" sound too?
 
 ```bash
-./install.sh --with-watch     # 额外装一个小后台监听（macOS）
+./install.sh --with-watch     # adds a small background watcher (macOS)
 ```
 
 ### Windows
 
-hook 本身在 Windows 能用，但需要 **Git for Windows**：CodeBuddy 在 Windows 上是通过 Git Bash 执行 hook 的（不支持 cmd 和 PowerShell），而这个安装脚本是 bash 写的。
+The hooks themselves work on Windows, but you need **Git for Windows** — CodeBuddy runs hooks through Git Bash on Windows (it does not support `cmd.exe` or PowerShell), and this installer is a bash script.
 
-1. 装 [Git for Windows](https://git-scm.com/download/win)
-2. 打开 **Git Bash**，进到仓库目录：
+1. Install [Git for Windows](https://git-scm.com/download/win)
+2. Open **Git Bash**, then in the repo directory:
 
 ```bash
-sh bin/notify.sh --test      # 确认能听到两声
+sh bin/notify.sh --test      # confirm you hear two sounds
 python3 lib/settings.py add "$(pwd)/bin/notify.sh"
 ```
 
-如果提示找不到 `python3`，去微软商店或 python.org 装一个，并确认它已经加进 Git Bash 的 PATH。
+If `python3` is missing, install it from the Microsoft Store or python.org, and make sure `python3` is on PATH inside Git Bash.
 
-### 确认装好了
-
-```bash
-sh bin/notify.sh --test        # 播放两档声音
-python3 lib/settings.py status # 看加进去的两条 hook
-```
-
-## 日常操作
+To uninstall on Windows (the bash uninstaller also works from Git Bash, but this is the minimal step):
 
 ```bash
-touch pause      # 全部静音，立刻生效
-rm pause         # 恢复
-
-./uninstall.sh   # 移除 hook，并停掉监听
+python3 lib/settings.py remove
 ```
 
-安装脚本只往 `~/.codebuddy/settings.json` 里**追加**，不会覆盖你已有的 hooks；动手前会先备份；重复执行什么都不会发生。
+### Check it worked
 
-## 换声音
+```bash
+sh bin/notify.sh --test        # plays both sounds
+python3 lib/settings.py status # shows the two hooks that were added
+```
 
-在 `settings.json` 的 hook 命令前面加环境变量：
+## Everyday use
+
+```bash
+cd ~/codebuddy-sound-hooks   # the pause flag lives in the repo root
+
+touch pause      # silence everything, effective immediately
+rm pause         # back on
+
+./uninstall.sh   # remove the hooks and stop the watcher
+```
+
+> The `pause` flag is looked up **next to the scripts**, not in your current directory. Creating it somewhere else looks like it works but silences nothing. If you cloned the repo elsewhere, use that path.
+
+The installer only **adds** to `~/.codebuddy/settings.json` — it never overwrites your existing hooks, it backs the file up first, and running it twice does nothing.
+
+## Change the sound
+
+Prepend an env var to the hook command in `settings.json`:
 
 ```json
 {
   "hooks": {
     "Stop": [
       { "hooks": [ { "type": "command",
-        "command": "CB_SOUND_DONE=/System/Library/Sounds/Hero.aiff sh ~/codebuddy-sound-hooks/bin/notify.sh # codebuddy-sound-hooks" } ] }
+        "command": "CB_SOUND_DONE=/System/Library/Sounds/Hero.aiff sh /path/to/codebuddy-sound-hooks/bin/notify.sh # codebuddy-sound-hooks" } ] }
     ]
   }
 }
 ```
 
-macOS 在 `/System/Library/Sounds/` 里自带这些：Basso、Blow、Bottle、Frog、Funk、Glass、Hero、Morse、Ping、Pop、Purr、Sosumi、Submarine、Tink。
+Replace `/path/to/codebuddy-sound-hooks` with wherever you cloned it — the installer writes an absolute path, and the hook runs without your shell's working directory.
 
-也可以加 `CB_VOLUME=0.5` 调音量。
+Keep the trailing `# codebuddy-sound-hooks` comment. It is not decoration: `lib/settings.py` uses it to recognise its own entry, so uninstalling removes exactly that line and leaves your other hooks alone.
 
-## 不响了怎么办
+macOS ships these in `/System/Library/Sounds/`: Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr, Sosumi, Submarine, Tink.
 
-**回复完成不响**
+`CB_VOLUME=0.5` works too.
+
+## No sound?
+
+**Turn finished, but silent**
 
 ```bash
-tail -5 events.log            # 有没有出现 Stop 记录
+tail -5 events.log            # is a "Stop" line appearing?
 python3 lib/settings.py status
 ```
 
-- 有记录但还是没声音 → 系统音量，或者声音文件路径不对。
-- 根本没有记录 → hook 没触发。检查 `~/.codebuddy/settings.json` 里的命令路径，再确认 `sh bin/notify.sh --test` 能出声。
+- Line appears, still silent → system volume, or the sound file path is wrong.
+- No line at all → the hook isn't firing. Check the command path in `~/.codebuddy/settings.json`, and confirm `sh bin/notify.sh --test` plays.
 
-**等待确认不响**
+**Waiting for you, but silent**
 
 ```bash
-python3 lib/watch-confirm.py --once   # 监听到底能不能匹配到东西
+python3 lib/watch-confirm.py --once   # does the watcher see anything at all?
 ```
 
-在 Linux 或 Windows 上匹配为 0 是正常的，见下面。
+Zero matches on Linux or Windows is expected — see below.
 
-## 平台支持
+## Platform support
 
-| 功能 | macOS | Linux | Windows |
+| Feature | macOS | Linux | Windows |
 |---|---|---|---|
-| 完成音（hook `Stop`） | ✅ | ✅ | ✅ 需要 Git Bash |
-| 等待确认音 | ✅ | ⚠️ 未实测 | ❌ 不支持 |
-| 监听开机自启 | ✅ launchd | ❌ 手动跑 | ❌ |
+| Finished sound (hook `Stop`) | ✅ | ✅ | ✅ via Git Bash |
+| Waiting-for-you sound | ✅ | ⚠️ untested | ❌ not supported |
+| Auto-start of the watcher | ✅ launchd | ❌ run manually | ❌ |
 
-"等待确认"没有 hook 可用（原因见下面），只能读 CodeBuddy 自己的日志。目前只认 macOS 下的路径：
+The watcher reads CodeBuddy's own log files to detect "waiting" (there is no hook for it — see [Why](#why-not-just-use-the-notification-hook)). It only knows the macOS log locations:
 
 - `~/Library/Logs/JetBrains/*/fusion/logs/*/fusion.log`
 - `~/Library/Application Support/CodeBuddy CN/logs/*/window*/exthost/Tencent-Cloud.coding-copilot/*.log`
 
-如果你在 Linux 或 Windows 上找到了对应的路径，非常欢迎提 PR。
+If you find the equivalent paths on Linux or Windows, a PR is very welcome.
 
-## 为什么"等确认"不用官方 Notification 事件
+## Why not just use the `Notification` hook?
 
-CodeBuddy 的 hooks 文档里有 `Notification` 事件，看着正合适。但它在 IDE 里**从来不触发**。
+CodeBuddy documents a `Notification` hook that looks like exactly the right tool for "waiting for confirmation". **It never fires in the IDE.**
 
-执行器是好的，问题在上面：四个能触发它的入口（`notifyPermissionPrompt`、`notifyIdle`、`notifyAuthSuccess`、`notifyElicitationDialog`）在插件里只有定义、**没有任何调用者**，是没接线的死代码。用了一整天记下来的事件日志里，`Stop` 有 7 条，`Notification` 0 条。
+Its executor is wired up, but all four things that would call it (`notifyPermissionPrompt`, `notifyIdle`, `notifyAuthSuccess`, `notifyElicitationDialog`) exist only as definitions with zero callers — dead code in the shipped extension. A day-long event log recorded seven `Stop` events and zero `Notification` events.
 
-所以：完成音走官方 `Stop` hook（两端可靠），等待确认音退回读日志。完整排查过程和代码证据在 [docs/findings.md](docs/findings.md)。
+So this project uses the official `Stop` hook for "finished" (reliable, both clients), and falls back to watching logs for "waiting for you". Full investigation, with the greps and payloads, is in [docs/findings.md](docs/findings.md).
 
-## 隐私
+## Privacy
 
-全部本地运行。hook 从 stdin 读事件 JSON、播个声音、往 `events.log` 追加一行（时间 + 事件名 + 客户端）。**没有任何网络代码**，上传不了任何东西，payload 里的工具入参和文件内容也从不读取、不落盘。
+Everything runs locally. The hook reads the event JSON from stdin, plays a sound, and appends one line to `events.log` (timestamp + event name + client). **There is no network code** — nothing is uploaded, and tool inputs or file contents in the payload are never read or stored.
 
-自己验证：
+Verify it yourself, including the installer scripts (which are the ones that actually touch your config):
 
 ```bash
-grep -rn "curl\|wget\|urllib\|requests\|socket" bin lib    # 无输出
+grep -rn "curl\|wget\|urllib\|requests\|socket" bin lib *.sh    # nothing
 ```
 
-细节见 [PRIVACY.md](PRIVACY.md)。
+Details in [PRIVACY.md](PRIVACY.md).
 
-## 工作原理
+## How it works
 
 ```
-CodeBuddy 一轮回复结束
-    └─ hook "Stop"        → bin/notify.sh          → 播完成音
-CodeBuddy 停下来等你
-    └─ 日志监听           → lib/watch-confirm.py   → 播确认音
+CodeBuddy turn ends
+    └─ hook "Stop"            → bin/notify.sh          → play done sound
+CodeBuddy waits for you
+    └─ log watcher            → lib/watch-confirm.py   → play confirm sound
 ```
 
-`lib/settings.py` 负责合并 `settings.json`，所以装两次没关系，卸载也不会碰你其他设置。
+`lib/settings.py` handles the `settings.json` merge, so installing twice is harmless and uninstalling leaves every other setting untouched.
 
-有个坑值得记下来：`Stop` hook 绝对不能往 stdout 写东西。CodeBuddy 会把 Stop hook 的 stdout 显示在对话里，等于往模型的上下文里塞垃圾。`bin/notify.sh` 保证 stdout 为空，并且始终 `exit 0`（Stop hook 退出码 2 会让 agent 不停止、继续干活）。
+One gotcha: `Stop` hooks must never write to stdout. CodeBuddy shows a Stop hook's stdout inside the chat, which would inject junk into the model's conversation context. `bin/notify.sh` keeps stdout empty and always exits 0 (exit code 2 on a Stop hook makes the agent keep working instead of stopping).
 
-## 许可证
+## License
 
 MIT
