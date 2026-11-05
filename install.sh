@@ -1,25 +1,31 @@
 #!/bin/bash
 # codebuddy-sound-hooks installer
 #
-#   ./install.sh              install hooks only (least invasive, recommended)
-#   ./install.sh --with-watch also install a background watcher for the
-#                             "waiting for your confirmation" sound (macOS)
-#   ./install.sh --dry-run    show what would happen, change nothing
+#   ./install.sh                 install hooks only (least invasive, recommended)
+#   ./install.sh --with-watch    also watch logs for the "waiting for your
+#                                confirmation" sound (macOS)
+#   ./install.sh --patch-plugin  also make subagent confirmations visible to
+#                                that watcher (edits the installed CodeBuddy
+#                                plugin; needs an IDE restart)
+#   ./install.sh --dry-run       show what would happen, change nothing
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 NOTIFY="$REPO_DIR/bin/notify.sh"
 WATCH="$REPO_DIR/lib/watch-confirm.py"
+PATCHER="$REPO_DIR/lib/patch-plugin.py"
 PLIST="$HOME/Library/LaunchAgents/com.codebuddy-sound-hooks.watch-confirm.plist"
 LABEL="com.codebuddy-sound-hooks.watch-confirm"
 
 WITH_WATCH=0
+WITH_PATCH=0
 DRY_RUN=0
 for arg in "$@"; do
     case "$arg" in
         --with-watch) WITH_WATCH=1 ;;
+        --patch-plugin) WITH_PATCH=1 ;;
         --dry-run) DRY_RUN=1 ;;
-        -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg" >&2; exit 1 ;;
     esac
 done
@@ -41,6 +47,15 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "    would run: python3 $REPO_DIR/lib/settings.py add $NOTIFY"
 else
     python3 "$REPO_DIR/lib/settings.py" add "$NOTIFY"
+fi
+
+if [ "$WITH_PATCH" -eq 1 ]; then
+    echo "==> making subagent confirmations visible to the watcher"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        python3 "$PATCHER" --apply --dry-run
+    else
+        python3 "$PATCHER" --apply
+    fi
 fi
 
 if [ "$WITH_WATCH" -eq 1 ]; then
@@ -85,5 +100,6 @@ echo "Done. Test it now:"
 echo "    sh $NOTIFY --test"
 echo
 echo "Then ask CodeBuddy something and wait for the sound."
+echo "Subagent confirmations need the plugin patch:  python3 $PATCHER --status"
 echo "Silence everything temporarily:  touch $REPO_DIR/pause"
 echo "Uninstall:                       $REPO_DIR/uninstall.sh"

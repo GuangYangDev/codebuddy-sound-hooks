@@ -54,6 +54,22 @@ cd codebuddy-sound-hooks
 ./install.sh --with-watch     # 额外装一个小后台监听（macOS）
 ```
 
+### subagent 的确认还得再走一步
+
+**主 agent** 等你确认时，插件会往自己的日志里写一行，监听听得到。**subagent**（`task` 工具里跑的那些）等你确认时，插件走的是另一条代码路径，用 `logger.info` 报这件事——而 `console.info` 根本不会进日志文件，所以没有东西可听。
+
+`lib/patch-plugin.py` 就是把那一个调用点从 `this.logger.info` 换成 `console.log`：
+
+```bash
+python3 lib/patch-plugin.py --apply    # 改完要重启 IDE
+python3 lib/patch-plugin.py --status   # 显示 patched；CodeBuddy 更新后会变回 patchable
+python3 lib/patch-plugin.py --revert   # 还原原始文件
+```
+
+它改的是已安装插件里的那个 bundle（那个开关只存在于那里），原文件备份在同目录的 `index.js.codebuddy-sound-hooks.orig`；只认一个锚点字符串，版本对不上就拒绝动手；写之前还会用 `node --check` 验语法。`uninstall.sh` 会自动还原。
+
+代价说在前面：**CodeBuddy 一更新就把 bundle 换掉，补丁跟着没了。** 用 `--status` 就能发现，重新 `--apply` 一次即可。补丁要生效必须重启 IDE。
+
 ### Windows
 
 hook 本身在 Windows 能用，但需要 **Git for Windows**：CodeBuddy 在 Windows 上是通过 Git Bash 执行 hook 的（不支持 cmd 和 PowerShell），而这个安装脚本是 bash 写的。
@@ -135,7 +151,11 @@ python3 lib/settings.py status
 
 ```bash
 python3 lib/watch-confirm.py --once   # 监听到底能不能匹配到东西
+python3 lib/patch-plugin.py --status  # subagent 那条：patched 还是 patchable
 ```
+
+- 是 subagent 在问、而 `--status` 显示 `patchable` → CodeBuddy 更新时把补丁覆盖了，重新 `--apply` 并重启 IDE。
+- `--once` 有匹配但还是没声音 → 同上，音量或声音文件路径的问题。
 
 在 Linux 或 Windows 上匹配为 0 是正常的，见下面。
 
@@ -145,6 +165,7 @@ python3 lib/watch-confirm.py --once   # 监听到底能不能匹配到东西
 |---|---|---|---|
 | 完成音（hook `Stop`） | ✅ | ✅ | ✅ 需要 Git Bash |
 | 等待确认音 | ✅ | ⚠️ 未实测 | ❌ 不支持 |
+| 等待确认音（**subagent**） | ✅ 需要[插件补丁](#subagent-的确认还得再走一步) | ⚠️ 未实测 | ❌ |
 | 监听开机自启 | ✅ launchd | ❌ 手动跑 | ❌ |
 
 "等待确认"没有 hook 可用（原因见下面），只能读 CodeBuddy 自己的日志。目前只认 macOS 下的路径：
@@ -161,6 +182,8 @@ CodeBuddy 的 hooks 文档里有 `Notification` 事件，看着正合适。但�
 执行器是好的，问题在上面：四个能触发它的入口（`notifyPermissionPrompt`、`notifyIdle`、`notifyAuthSuccess`、`notifyElicitationDialog`）在插件里只有定义、**没有任何调用者**，是没接线的死代码。用了一整天记下来的事件日志里，`Stop` 有 7 条，`Notification` 0 条。
 
 所以：完成音走官方 `Stop` hook（两端可靠），等待确认音退回读日志。完整排查过程和代码证据在 [docs/findings.md](docs/findings.md)。
+
+subagent 的确认又是第三条路（该文件第 6 节）：插件用 `logger.info` 报它，而那个输出不会进任何日志文件，所以才有那个可选的[插件补丁](#subagent-的确认还得再走一步)。
 
 ## 隐私
 
@@ -181,6 +204,8 @@ CodeBuddy 一轮回复结束
     └─ hook "Stop"        → bin/notify.sh          → 播完成音
 CodeBuddy 停下来等你
     └─ 日志监听           → lib/watch-confirm.py   → 播确认音
+        ├─ 主 agent   : state_update → waiting_user_input
+        └─ subagent   : [SubagentToolListener] 那行，需先 --patch-plugin
 ```
 
 `lib/settings.py` 负责合并 `settings.json`，所以装两次没关系，卸载也不会碰你其他设置。

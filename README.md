@@ -54,6 +54,22 @@ Want the "waiting for you" sound too?
 ./install.sh --with-watch     # adds a small background watcher (macOS)
 ```
 
+### Subagents need one more step
+
+When the **main agent** waits for approval, the plugin writes a line into its own log and the watcher hears it. When a **subagent** (the `task` tool) waits for approval, the plugin reports it through a logger whose output never reaches that log — `console.info` is not forwarded, so there is nothing to watch. Measured, not assumed: full write-up in [docs/findings.md §6](docs/findings.md).
+
+`lib/patch-plugin.py` makes that one call site visible, by switching it from `this.logger.info` to `console.log`:
+
+```bash
+python3 lib/patch-plugin.py --apply    # then restart the IDE
+python3 lib/patch-plugin.py --status   # "patched" — or "patchable" after a CodeBuddy update
+python3 lib/patch-plugin.py --revert   # put the original file back
+```
+
+It edits the installed plugin bundle (that is the only place the switch exists), keeps the original next to it as `index.js.codebuddy-sound-hooks.orig`, uses one anchor string, refuses to patch an unknown version, and syntax-checks the result with `node --check` before writing. `uninstall.sh` reverts it.
+
+The trade-off is real: **a CodeBuddy update replaces the bundle and the patch is gone.** `--status` is how you notice; re-run `--apply`. Restarting the IDE is required for the patched bundle to load.
+
 ### Windows
 
 The hooks themselves work on Windows, but you need **Git for Windows** — CodeBuddy runs hooks through Git Bash on Windows (it does not support `cmd.exe` or PowerShell), and this installer is a bash script.
@@ -135,7 +151,11 @@ python3 lib/settings.py status
 
 ```bash
 python3 lib/watch-confirm.py --once   # does the watcher see anything at all?
+python3 lib/patch-plugin.py --status  # subagent confirmations: patched or patchable?
 ```
+
+- A subagent is asking and `--status` says `patchable` → CodeBuddy updated itself and replaced the patch. Re-run `--apply` and restart the IDE.
+- `--once` shows a match but nothing was heard → same causes as above (volume, sound path).
 
 Zero matches on Linux or Windows is expected — see below.
 
@@ -145,6 +165,7 @@ Zero matches on Linux or Windows is expected — see below.
 |---|---|---|---|
 | Finished sound (hook `Stop`) | ✅ | ✅ | ✅ via Git Bash |
 | Waiting-for-you sound | ✅ | ⚠️ untested | ❌ not supported |
+| Waiting-for-you sound, **subagent** | ✅ + [plugin patch](#subagents-need-one-more-step) | ⚠️ untested | ❌ |
 | Auto-start of the watcher | ✅ launchd | ❌ run manually | ❌ |
 
 The watcher reads CodeBuddy's own log files to detect "waiting" (there is no hook for it — see [Why](#why-not-just-use-the-notification-hook)). It only knows the macOS log locations:
@@ -161,6 +182,8 @@ CodeBuddy documents a `Notification` hook that looks like exactly the right tool
 Its executor is wired up, but all four things that would call it (`notifyPermissionPrompt`, `notifyIdle`, `notifyAuthSuccess`, `notifyElicitationDialog`) exist only as definitions with zero callers — dead code in the shipped extension. A day-long event log recorded seven `Stop` events and zero `Notification` events.
 
 So this project uses the official `Stop` hook for "finished" (reliable, both clients), and falls back to watching logs for "waiting for you". Full investigation, with the greps and payloads, is in [docs/findings.md](docs/findings.md).
+
+Subagent confirmations need a third route again (§6 of that file): the plugin reports them through a logger whose output is not forwarded to any log file, so the optional [plugin patch](#subagents-need-one-more-step) exists to make that one line visible.
 
 ## Privacy
 
@@ -181,6 +204,8 @@ CodeBuddy turn ends
     └─ hook "Stop"            → bin/notify.sh          → play done sound
 CodeBuddy waits for you
     └─ log watcher            → lib/watch-confirm.py   → play confirm sound
+        ├─ main agent    : state_update → waiting_user_input
+        └─ subagent      : [SubagentToolListener] line, after --patch-plugin
 ```
 
 `lib/settings.py` handles the `settings.json` merge, so installing twice is harmless and uninstalling leaves every other setting untouched.

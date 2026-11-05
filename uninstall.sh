@@ -21,6 +21,9 @@ rm -f "$PLIST"
 echo "==> removing CodeBuddy hooks"
 python3 "$REPO_DIR/lib/settings.py" remove
 
+echo "==> restoring the CodeBuddy plugin bundle"
+python3 "$REPO_DIR/lib/patch-plugin.py" --revert || true
+
 echo
 echo "Done. A backup of your previous settings is kept at:"
 echo "    ~/.codebuddy/settings.json.bak.codebuddy-sound-hooks"

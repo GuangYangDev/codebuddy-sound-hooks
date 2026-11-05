@@ -13,10 +13,15 @@ What we watch
 -------------
 JetBrains plugin
     <JetBrainsLogs>/<IDE>/fusion/logs/<hash>/fusion.log
-        state_update: running -> waiting_user_input
+        state_update: running -> waiting_user_input        (main agent)
+        [SubagentToolListener] User confirmation required  (subagent, needs patch)
 Desktop IDE
     <CodeBuddyCN>/logs/<ts>/window*/exthost/Tencent-Cloud.coding-copilot/*.log
         needUserConfirm: true
+
+The subagent line only appears after `lib/patch-plugin.py --apply`. The plugin
+reports subagent confirmations through a logger whose output never reaches
+fusion.log, so there is no unpatched signal to watch — see docs/findings.md.
 
 Usage
 -----
@@ -47,7 +52,7 @@ DISCOVER_INTERVAL = 3.0
 COOLDOWN = 1.5
 MAX_FILES = 40
 
-# (label, root, relative glob, compiled pattern)
+# (label, root, relative glob, [(tag, compiled pattern)])
 # Roots that do not exist on this machine are skipped silently.
 import re
 
@@ -56,13 +61,20 @@ SOURCES = [
         "jetbrains-plugin",
         HOME / "Library" / "Logs" / "JetBrains",
         "*/fusion/logs/*/fusion.log",
-        re.compile(r"state_update:\s*running\s*\u2192\s*waiting_user_input"),
+        [
+            # Main agent: the ACP session flips while a tool waits for approval.
+            ("session", re.compile(r"state_update:\s*running\s*\u2192\s*waiting_user_input")),
+            # Subagent: written by lib/patch-plugin.py, absent without it.
+            ("subagent", re.compile(r"\[SubagentToolListener\] User confirmation required")),
+        ],
     ),
     (
         "desktop-ide",
         HOME / "Library" / "Application Support" / "CodeBuddy CN" / "logs",
         "*/window*/exthost/Tencent-Cloud.coding-copilot/*.log",
-        re.compile(r"needUserConfirm:\s*true"),
+        [
+            ("session", re.compile(r"needUserConfirm:\s*true")),
+        ],
     ),
 ]
 
@@ -90,10 +102,10 @@ def play() -> None:
         log(f"play failed: {exc}")
 
 
-def discover() -> dict[Path, tuple[str, re.Pattern]]:
-    found: dict[Path, tuple[str, re.Pattern]] = {}
+def discover() -> dict[Path, tuple[str, list[tuple[str, re.Pattern]]]]:
+    found: dict[Path, tuple[str, list[tuple[str, re.Pattern]]]] = {}
     now = time.time()
-    for label, root, pattern, regex in SOURCES:
+    for label, root, pattern, rules in SOURCES:
         if not root.is_dir():
             continue
         try:
@@ -111,7 +123,7 @@ def discover() -> dict[Path, tuple[str, re.Pattern]]:
             fresh.sort(key=lambda p: p.stat().st_mtime, reverse=True)
             fresh = fresh[:MAX_FILES]
         for path in fresh:
-            found[path] = (label, regex)
+            found[path] = (label, rules)
     return found
 
 
@@ -159,15 +171,22 @@ def main() -> int:
 
     if "--once" in sys.argv:
         total = 0
-        for path, (label, regex) in discover().items():
+        for path, (label, rules) in discover().items():
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            hits = [ln for ln in text.splitlines() if regex.search(ln)]
+            hits = []
+            for line in text.splitlines():
+                for tag, regex in rules:
+                    if regex.search(line):
+                        hits.append((tag, line))
+                        break
             if hits:
                 total += len(hits)
-                print(f"[{label}] {path.name}: {len(hits)} match(es), last: {hits[-1][:120]}")
+                tags = ",".join(sorted({tag for tag, _ in hits}))
+                print(f"[{label}/{tags}] {path.name}: {len(hits)} match(es), "
+                      f"last: {hits[-1][1][:120]}")
         print(f"total matches: {total}")
         return 0
 
@@ -177,7 +196,7 @@ def main() -> int:
             "the watcher will wait for them to appear")
 
     tailers: dict[Path, Tailer] = {}
-    meta: dict[Path, tuple[str, re.Pattern]] = {}
+    meta: dict[Path, tuple[str, list[tuple[str, re.Pattern]]]] = {}
     last_play = 0.0
     last_discover = 0.0
 
@@ -199,15 +218,16 @@ def main() -> int:
             info = meta.get(path)
             if not info:
                 continue
-            label, regex = info
+            label, rules = info
             for line in tailer.read_lines():
-                if not regex.search(line):
+                tag = next((name for name, regex in rules if regex.search(line)), None)
+                if tag is None:
                     continue
                 if now - last_play < COOLDOWN:
                     continue
                 last_play = now
                 play()
-                log(f"confirm needed [{label}]")
+                log(f"confirm needed [{label}/{tag}]")
 
         time.sleep(POLL_INTERVAL)
 

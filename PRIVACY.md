@@ -19,7 +19,13 @@ Turn off the log entirely by making the directory read-only or by deleting `even
 - `~/Library/Logs/JetBrains/*/fusion/logs/*/fusion.log`
 - `~/Library/Application Support/CodeBuddy CN/logs/*/window*/exthost/Tencent-Cloud.coding-copilot/*.log`
 
-It matches a single pattern per file (`state_update: running→waiting_user_input`, `needUserConfirm: true`) and remembers a byte offset. It does not copy, upload, or retain log content. Matched lines are not stored anywhere; only a generic `confirm needed [source]` line goes into `.watch.log`.
+It matches on marker strings only — `state_update: running→waiting_user_input`, `[SubagentToolListener] User confirmation required`, `needUserConfirm: true` — and remembers a byte offset. It does not copy, upload, or retain log content. Matched lines are not stored anywhere; only a generic `confirm needed [source]` line goes into `.watch.log`.
+
+**lib/patch-plugin.py** (opt-in) edits the installed CodeBuddy plugin bundle so that subagent confirmations become visible to the watcher. It replaces one identifier (`this.logger.info` → `console.log`) in:
+
+- `~/Library/Application Support/JetBrains/*/plugins/coding-copilot-jetbrains/vsix/extension/out/extension/index.js`
+
+The original bytes are saved next to it as `index.js.codebuddy-sound-hooks.orig`, and `--revert` (called by `uninstall.sh`) restores them. Nothing is read out of that file.
 
 ## What is written to disk
 
@@ -28,7 +34,7 @@ Inside the repository directory:
 | File | Content |
 |---|---|
 | `events.log` | `2026-11-01 02:14:19 Stop client=JetBrains` |
-| `.watch.log` | watcher startup lines and `confirm needed [source]` |
+| `.watch.log` | watcher startup lines and `confirm needed [source/tag]` |
 | `pause` | empty marker file, created by you, not by the scripts |
 
 And in `~/.codebuddy/settings.json`, two hook entries pointing at `bin/notify.sh`. A backup of the file is written next to it as `settings.json.bak.codebuddy-sound-hooks`.
